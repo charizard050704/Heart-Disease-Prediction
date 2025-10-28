@@ -6,6 +6,8 @@ Unified Symptom+Clinical training (no truncation).
 - Trains RandomForestClassifier with RandomizedSearchCV
 - Outputs: models/symptom_model.joblib, plots, metrics JSON
 """
+import matplotlib
+matplotlib.use("Agg")
 import os, json, joblib, warnings, time
 from pathlib import Path
 import numpy as np, pandas as pd, matplotlib.pyplot as plt, seaborn as sns
@@ -18,6 +20,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report, roc_auc_score
 from scipy.stats import randint
 
+
 warnings.filterwarnings("ignore")
 
 DATA_CLINICAL = "data/heart.csv"
@@ -25,6 +28,31 @@ DATA_SYMPTOM = "data/heart_symptoms.csv"
 MODEL_DIR = Path("models"); ASSETS_DIR = Path("assets")
 METRICS_PATH = ASSETS_DIR / "model_metrics_extended.json"
 MODEL_OUT = MODEL_DIR / "symptom_model.joblib"
+# Skip retraining if model already exists
+if MODEL_OUT.exists():
+    print(f"⚡ Existing model found at {MODEL_OUT}. Skipping retraining...")
+    model = joblib.load(MODEL_OUT)
+    print("Loaded existing model successfully.")
+
+    # Recreate plots & metrics quickly
+    feat_imp = model.named_steps["clf"].feature_importances_
+    feat_imp = np.array(feat_imp)
+    feat_imp = np.sort(feat_imp)[::-1]
+
+    plt.figure(figsize=(10, 6))
+    top_n = min(40, len(feat_imp))
+    plt.bar(range(top_n), feat_imp[:top_n])
+    plt.title("Top Feature Importances – Symptom+Clinical Model (Reloaded)")
+    plt.xlabel("Feature Rank")
+    plt.ylabel("Importance")
+    plt.tight_layout()
+    plt.savefig(ASSETS_DIR/"symptom_clinical_feature_importance.png", bbox_inches="tight")
+    plt.close()
+    print("✅ Regenerated feature importance plot.")
+
+    print("✅ Model reload complete. Exiting early.")
+    exit(0)
+
 MODEL_DIR.mkdir(parents=True, exist_ok=True); ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
 RANDOM_STATE, N_ITER_SEARCH, CV_FOLDS, TEST_SIZE = 42, 40, 3, 0.18
@@ -108,15 +136,27 @@ plt.title("Confusion Matrix"); plt.tight_layout()
 plt.savefig(ASSETS_DIR/"symptom_confusion_matrix.png"); plt.close()
 
 feat_imp = best.named_steps["clf"].feature_importances_
-plt.figure(figsize=(10,5))
-plt.bar(range(len(feat_imp)), np.sort(feat_imp)[::-1][:40])
-plt.title("Feature Importance (Top 40)"); plt.tight_layout()
-plt.savefig(ASSETS_DIR/"symptom_feature_importance.png"); plt.close()
+feat_imp = np.array(feat_imp)
+feat_imp = np.sort(feat_imp)[::-1]
+
+plt.figure(figsize=(10, 6))
+top_n = min(40, len(feat_imp))
+plt.bar(range(top_n), feat_imp[:top_n])
+plt.title("Top Feature Importances – Symptom+Clinical Model")
+plt.xlabel("Feature Rank")
+plt.ylabel("Importance")
+plt.tight_layout()
+plt.savefig(ASSETS_DIR/"symptom_clinical_feature_importance.png", bbox_inches="tight")
+plt.close()
+print("✅ Saved feature importance plot successfully.")
 
 metrics = {}
 if METRICS_PATH.exists():
-    try: metrics = json.load(open(METRICS_PATH))
-    except: metrics = {}
+    try:
+        with open(METRICS_PATH, "r") as f:
+            metrics = json.load(f)
+    except Exception:
+        metrics = {}
 metrics["Symptom+Clinical Fusion"] = {
     "test_accuracy": float(acc), "roc_auc": float(roc),
     "train_rows": int(X_train.shape[0]), "test_rows": int(X_test.shape[0]),
