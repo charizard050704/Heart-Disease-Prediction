@@ -1,0 +1,157 @@
+{
+    "Train Accuracy": 1.0,
+    "Validation Accuracy": 0.7778,
+    "Test Accuracy": 0.9111,
+    "Accuracy": 0.7778,
+    "Precision": 0.8667,
+    "Recall": 0.619,
+    "F1-Score": 0.7222,
+    "RMSE": 0.4398,
+    "MAE": 0.2397,
+    "Brier Score": 0.1934,
+    "Log Loss": 0.7048,
+    "Top SHAP Features": [
+        {
+            "feature": "ANN_Prob",
+            "impact": 0.232857
+        },
+        {
+            "feature": "XGBoost_Prob",
+            "impact": 0.151827
+        },
+        {
+            "feature": "RandomForest_Prob",
+            "impact": 0.012418
+        }
+    ],
+    "Feature Correlations": {
+        "thal": 0.5266395760779841,
+        "ca": 0.4631886250630229,
+        "oldpeak": 0.4240520567159986,
+        "thalach": -0.42381706418337134,
+        "exang": 0.4213554904564529,
+        "cp": 0.4089446866752392,
+        "slope": 0.33304910873955557,
+        "sex": 0.2784666966537961,
+        "age": 0.2270751546532363,
+        "restecg": 0.1663434881660242
+    },
+    "Health Summary Stats": {
+        "age": {
+            "mean": 54.542,
+            "median": 56.0,
+            "std": 9.05
+        },
+        "sex": {
+            "mean": 0.677,
+            "median": 1.0,
+            "std": 0.468
+        },
+        "cp": {
+            "mean": 3.158,
+            "median": 3.0,
+            "std": 0.965
+        },
+        "trestbps": {
+            "mean": 131.694,
+            "median": 130.0,
+            "std": 17.763
+        },
+        "chol": {
+            "mean": 247.35,
+            "median": 243.0,
+            "std": 51.998
+        },
+        "fbs": {
+            "mean": 0.145,
+            "median": 0.0,
+            "std": 0.352
+        },
+        "restecg": {
+            "mean": 0.997,
+            "median": 1.0,
+            "std": 0.995
+        },
+        "thalach": {
+            "mean": 149.599,
+            "median": 153.0,
+            "std": 22.942
+        },
+        "exang": {
+            "mean": 0.327,
+            "median": 0.0,
+            "std": 0.47
+        },
+        "oldpeak": {
+            "mean": 1.056,
+            "median": 0.8,
+            "std": 1.166
+        },
+        "slope": {
+            "mean": 1.603,
+            "median": 2.0,
+            "std": 0.618
+        },
+        "ca": {
+            "mean": 0.677,
+            "median": 0.0,
+            "std": 0.939
+        },
+        "thal": {
+            "mean": 4.731,
+            "median": 3.0,
+            "std": 1.939
+        },
+        "target": {
+            "mean": 0.461,
+            "median": 0.0,
+            "std": 0.499
+        }
+    },
+    "Symptom+Clinical Model": {
+        "test_accuracy": 0.833333,
+        "roc_auc": 0.936552,
+        "n_features": 28,
+        "selected_clinical_features": [
+            "age",
+            "sex",
+            "cp",
+            "trestbps",
+            "chol",
+            "fbs",
+            "restecg",
+            "thalach",
+            "exang",
+            "oldpeak",
+            "slope",
+            "ca",
+            "thal"
+        ],
+        "selected_symptom_features": [
+            "BMI",
+            "Smoking",
+            "AlcoholDrinking",
+            "Stroke",
+            "PhysicalHealth",
+            "MentalHealth",
+            "DiffWalking",
+            "AgeCategory",
+            "Race",
+            "Diabetic",
+            "PhysicalActivity",
+            "SleepTime",
+            "Asthma",
+            "KidneyDisease",
+            "SkinCancer"
+        ],
+        "training_rows": 297,
+        "best_params": {
+            "clf__bootstrap": true,
+            "clf__max_depth": 60,
+            "clf__max_features": "sqrt",
+            "clf__min_samples_leaf": 4,
+            "clf__min_samples_split": 8,
+            "clf__n_estimators": 500
+        }
+    }
+}
