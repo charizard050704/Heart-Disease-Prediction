@@ -10,16 +10,7 @@ import warnings
 import seaborn as sns
 from sklearn.model_selection import train_test_split
 
-# --- Uniform plot settings (professor requirements) ---
-plt.rcParams['figure.dpi'] = 300
-plt.rcParams['savefig.dpi'] = 300
-plt.rcParams['font.size'] = 14
-plt.rcParams['axes.labelsize'] = 14
-plt.rcParams['xtick.labelsize'] = 14
-plt.rcParams['ytick.labelsize'] = 14
-plt.rcParams['legend.fontsize'] = 14
-
-# Optional: silence some non-critical warnings
+# Optional: silence some non-critical warnings (Convergence/Future)
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -36,8 +27,9 @@ metrics_path = "assets/model_metrics_extended.json"
 print("Loading data and model for SHAP analysis...")
 df = pd.read_csv(data_path)
 
-# Load model bundle
+# Load model bundle (expects keys: preprocessor, xgb, rf, ann_base, fusion)
 model_bundle = joblib.load(model_path)
+
 preprocessor = model_bundle["preprocessor"]
 xgb = model_bundle["xgb"]
 rf = model_bundle["rf"]
@@ -56,7 +48,6 @@ X_val, X_test, y_val, y_test = train_test_split(
 
 X_val_prep = preprocessor.transform(X_val)
 
-# Stack base model probabilities
 def stack_probs(models, X_prepared):
     return np.column_stack([m.predict_proba(X_prepared)[:, 1] for m in models])
 
@@ -71,8 +62,10 @@ shap_values = explainer(X_val_stack)
 feature_names = ["XGBoost_Prob", "RandomForest_Prob", "ANN_Prob"]
 X_val_df = pd.DataFrame(X_val_stack, columns=feature_names)
 
-# --- Global SHAP summary ---
-print("Generating SHAP summary plot...")
+# ============================================================
+#   SHAP SUMMARY PLOT — PNG FOR UI
+# ============================================================
+print("Generating SHAP summary plot (PNG for UI)...")
 
 if shap_values.values.ndim == 3 and shap_values.values.shape[2] >= 2:
     mean_abs_shap = np.mean(np.abs(shap_values.values[:, :, 1]), axis=0).flatten()
@@ -86,25 +79,53 @@ shap_importance = pd.DataFrame({
 
 plt.figure(figsize=(6, 3 + 0.5 * len(feature_names)))
 sns.barplot(data=shap_importance, x="Mean |SHAP|", y="Feature")
-# Title removed as per professor requirement
+plt.title("Global Feature Importance (Fusion Model)")
+plt.xlabel("Mean |SHAP value|")
+plt.tight_layout()
+plt.savefig("assets/shap_summary.png", bbox_inches="tight")
+plt.close()
+
+# ============================================================
+#   SHAP SUMMARY PLOT — EPS FOR PROFESSOR (NO TITLE)
+# ============================================================
+print("Generating SHAP summary plot (EPS for report)...")
+
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.dpi'] = 300
+plt.rcParams['font.size'] = 14
+plt.rcParams['axes.labelsize'] = 14
+
+plt.figure(figsize=(6, 3 + 0.5 * len(feature_names)))
+sns.barplot(data=shap_importance, x="Mean |SHAP|", y="Feature")
+# Title removed for EPS
 plt.xlabel("Mean |SHAP value|")
 plt.tight_layout()
 plt.savefig("assets/shap_summary.eps", format='eps', bbox_inches="tight")
 plt.close()
 
-# --- SHAP Force Plot ---
+
+# ============================================================
+#   SHAP FORCE PLOT — PNG ONLY (KEEP EXACTLY AS IS)
+# ============================================================
 sample_index = 10
 if sample_index >= X_val_stack.shape[0]:
     sample_index = 0
 
-print(f"Generating SHAP force plot for sample index {sample_index}...")
+print(f"Generating SHAP force plot (PNG for UI) for sample {sample_index}...")
 
-expected_vals = getattr(explainer, "expected_values", None)
-base_value = None
-if isinstance(expected_vals, (list, np.ndarray)):
+# expected value handling
+expected_vals = None
+if hasattr(explainer, "expected_values"):
+    expected_vals = explainer.expected_values
+elif hasattr(explainer, "expected_value"):
+    expected_vals = explainer.expected_value
+
+if expected_vals is None:
+    base_value = None
+elif isinstance(expected_vals, (list, np.ndarray)):
     try:
         base_value = expected_vals[1] if len(expected_vals) > 1 else expected_vals[0]
-    except:
+    except Exception:
         base_value = expected_vals[0]
 else:
     base_value = expected_vals
@@ -125,13 +146,16 @@ shap.force_plot(
     matplotlib=True,
     show=False
 )
-
-# Force plot title removed
+plt.title(f"SHAP Force Plot – Sample {sample_index}\nPredicted Heart Disease Risk: {patient_pred:.2%}")
 plt.tight_layout()
-plt.savefig("assets/shap_force_patient.eps", format='eps', bbox_inches="tight")
+plt.savefig("assets/shap_force_patient.png", bbox_inches="tight")
 plt.close()
+# (NO EPS version needed for force plot)
 
-# --- Save SHAP features to JSON ---
+
+# ============================================================
+#   SAVE TOP SHAP FEATURES INTO METRICS
+# ============================================================
 if shap_values.values.ndim == 3 and shap_values.values.shape[2] >= 2:
     mean_abs_shap = np.mean(np.abs(shap_values.values[:, :, 1]), axis=0).flatten()
 else:
@@ -156,4 +180,4 @@ metrics_data["Top SHAP Features"] = top_features
 with open(metrics_path, "w") as fh:
     json.dump(metrics_data, fh, indent=4)
 
-print("✅ SHAP analysis complete. EPS plots saved in /assets/")
+print("✅ SHAP PNG + EPS summary plots complete (force plot PNG unchanged).")

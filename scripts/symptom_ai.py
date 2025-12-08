@@ -51,7 +51,115 @@ if MODEL_OUT.exists():
     print("✅ Regenerated feature importance plot.")
 
     print("✅ Model reload complete. Exiting early.")
-    exit(0)
+print("Model reload complete. Regenerating PNG + EPS plots...")
+
+# ----------------------------------------------------------
+# RELOAD CLINICAL + SYMPTOM DATA TO REBUILD COMBINED MATRIX
+# ----------------------------------------------------------
+clin = pd.read_csv(DATA_CLINICAL)
+symp = pd.read_csv(DATA_SYMPTOM)
+
+# Identify target again
+target = None
+for c in ["target","Target","HeartDisease","heart_disease"]:
+    if c in clin.columns:
+        target = c
+        break
+
+clin[target] = clin[target].apply(lambda x: 1 if str(x).lower() in {"1","yes","true"} else 0)
+if "HeartDisease" in symp.columns:
+    symp["target"] = symp["HeartDisease"].apply(lambda x: 1 if str(x).lower() in {"1","yes","true"} else 0)
+else:
+    symp["target"] = np.nan
+
+# Create union of columns
+all_cols = sorted(set(clin.columns) | set(symp.columns))
+for df_tmp in [clin, symp]:
+    for c in all_cols:
+        if c not in df_tmp.columns:
+            df_tmp[c] = np.nan
+
+combined = pd.concat([clin[all_cols], symp[all_cols]], axis=0, ignore_index=True)
+
+y = combined["target"].astype(float).fillna(0)
+X = combined.drop(columns=["target"])
+
+numeric_cols = X.select_dtypes(include=[np.number]).columns.tolist()
+categorical_cols = [c for c in X.columns if c not in numeric_cols]
+
+# EXACT SAME PREPROCESSING STEPS AS TRAINING
+pre = model.named_steps["pre"]
+clf = model.named_steps["clf"]
+
+X_train_reload, X_test_reload, y_train_reload, y_test_reload = train_test_split(
+    X, y, test_size=0.18, stratify=(y > 0), random_state=42
+)
+
+# Align columns EXACTLY to what the preprocessor saw during training
+missing_cols = [c for c in pre.feature_names_in_ if c not in X_test_reload.columns]
+for c in missing_cols:
+    X_test_reload[c] = np.nan  # fill missing required columns
+
+# Ensure column order matches training
+X_test_aligned = X_test_reload[pre.feature_names_in_]
+
+# Now safely transform
+X_test_prepared = pre.transform(X_test_aligned)
+
+# ----------------------------------------------------------
+# FEATURE IMPORTANCES (PNG + EPS)
+# ----------------------------------------------------------
+feat_imp = clf.feature_importances_
+feat_imp = np.array(feat_imp)
+feat_imp_sorted = np.sort(feat_imp)[::-1]
+top_n = min(40, len(feat_imp_sorted))
+
+# PNG
+plt.figure(figsize=(10, 6))
+plt.bar(range(top_n), feat_imp_sorted[:top_n])
+plt.title("Top Feature Importances – Symptom+Clinical Model (Reloaded)")
+plt.xlabel("Feature Rank")
+plt.ylabel("Importance")
+plt.tight_layout()
+plt.savefig(ASSETS_DIR/"symptom_clinical_feature_importance.png", bbox_inches="tight")
+plt.close()
+
+# EPS
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['font.size'] = 14
+plt.figure(figsize=(10, 6))
+plt.bar(range(top_n), feat_imp_sorted[:top_n])
+plt.xlabel("Feature Rank")
+plt.ylabel("Importance")
+plt.tight_layout()
+plt.savefig(ASSETS_DIR/"symptom_clinical_feature_importance.eps", format='eps', bbox_inches="tight")
+plt.close()
+
+# ----------------------------------------------------------
+# CONFUSION MATRIX (PNG + EPS)
+# ----------------------------------------------------------
+y_pred_reload = clf.predict(X_test_prepared)
+cm = confusion_matrix(y_test_reload, y_pred_reload)
+
+# PNG
+plt.figure(figsize=(5,4))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
+plt.title("Confusion Matrix")
+plt.tight_layout()
+plt.savefig(ASSETS_DIR/"symptom_confusion_matrix.png")
+plt.close()
+
+# EPS
+plt.figure(figsize=(5,4))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.tight_layout()
+plt.savefig(ASSETS_DIR/"symptom_confusion_matrix.eps", format='eps', bbox_inches="tight")
+plt.close()
+
+print("✅ EPS + PNG regeneration complete.")
+exit(0)
 
 MODEL_DIR.mkdir(parents=True, exist_ok=True); ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -135,6 +243,26 @@ plt.figure(figsize=(5,4)); sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
 plt.title("Confusion Matrix"); plt.tight_layout()
 plt.savefig(ASSETS_DIR/"symptom_confusion_matrix.png"); plt.close()
 
+# --- EPS version for professor (no title, font 14, dpi 300) ---
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.dpi'] = 300
+plt.rcParams['font.size'] = 14
+plt.rcParams['axes.labelsize'] = 14
+plt.rcParams['xtick.labelsize'] = 14
+plt.rcParams['ytick.labelsize'] = 14
+
+plt.figure(figsize=(5,4))
+sns.heatmap(cm, annot=True, fmt="d", cmap="Blues")
+# no title
+plt.xlabel("Predicted")
+plt.ylabel("Actual")
+plt.tight_layout()
+plt.savefig(ASSETS_DIR/"symptom_confusion_matrix.eps", format='eps', bbox_inches="tight")
+plt.close()
+
+print("✅ EPS version saved: symptom_confusion_matrix.eps")
+
+
 feat_imp = best.named_steps["clf"].feature_importances_
 feat_imp = np.array(feat_imp)
 feat_imp = np.sort(feat_imp)[::-1]
@@ -149,6 +277,25 @@ plt.tight_layout()
 plt.savefig(ASSETS_DIR/"symptom_clinical_feature_importance.png", bbox_inches="tight")
 plt.close()
 print("✅ Saved feature importance plot successfully.")
+
+# --- EPS version for professor (no title, font 14, dpi 300) ---
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.dpi'] = 300
+plt.rcParams['font.size'] = 14
+plt.rcParams['axes.labelsize'] = 14
+plt.rcParams['xtick.labelsize'] = 14
+plt.rcParams['ytick.labelsize'] = 14
+
+plt.figure(figsize=(10, 6))
+plt.bar(range(top_n), feat_imp[:top_n])
+# no title for EPS
+plt.xlabel("Feature Rank")
+plt.ylabel("Importance")
+plt.tight_layout()
+plt.savefig(ASSETS_DIR/"symptom_clinical_feature_importance.eps", format='eps', bbox_inches="tight")
+plt.close()
+
+print("✅ EPS version saved: symptom_clinical_feature_importance.eps")
 
 metrics = {}
 if METRICS_PATH.exists():

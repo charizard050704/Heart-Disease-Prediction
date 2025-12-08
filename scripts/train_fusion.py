@@ -162,6 +162,29 @@ plt.tight_layout()
 plt.savefig("assets/roc_curve.png")
 plt.close()
 
+# --- EPS version for professor (no title, uniform font, 300 DPI) ---
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.dpi'] = 300
+plt.rcParams['font.size'] = 14
+plt.rcParams['axes.labelsize'] = 14
+plt.rcParams['xtick.labelsize'] = 14
+plt.rcParams['ytick.labelsize'] = 14
+plt.rcParams['legend.fontsize'] = 14
+
+plt.figure()
+plt.plot(fpr, tpr, label=f"AUC={roc_auc:.2f}")
+plt.plot([0,1],[0,1],'--')
+# No title for EPS
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.legend()
+plt.tight_layout()
+plt.savefig("assets/roc_curve.eps", format='eps', bbox_inches="tight")
+plt.close()
+
+print("✅ Saved EPS ROC curve for professor.")
+
+
 prec, rec, _ = precision_recall_curve(y_val, y_val_prob)
 plt.figure()
 plt.plot(rec, prec)

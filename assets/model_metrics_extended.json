@@ -6,24 +6,10 @@
     "Precision": 0.8667,
     "Recall": 0.619,
     "F1-Score": 0.7222,
-    "RMSE": 0.4398,
-    "MAE": 0.2397,
-    "Brier Score": 0.1934,
-    "Log Loss": 0.7048,
-    "Top SHAP Features": [
-        {
-            "feature": "ANN_Prob",
-            "impact": 0.232857
-        },
-        {
-            "feature": "XGBoost_Prob",
-            "impact": 0.151827
-        },
-        {
-            "feature": "RandomForest_Prob",
-            "impact": 0.012418
-        }
-    ],
+    "RMSE": 0.4408,
+    "MAE": 0.2384,
+    "Brier Score": 0.1943,
+    "Log Loss": 0.7191,
     "Feature Correlations": {
         "thal": 0.5266395760779841,
         "ca": 0.4631886250630229,
@@ -108,50 +94,18 @@
             "std": 0.499
         }
     },
-    "Symptom+Clinical Model": {
-        "test_accuracy": 0.833333,
-        "roc_auc": 0.936552,
-        "n_features": 28,
-        "selected_clinical_features": [
-            "age",
-            "sex",
-            "cp",
-            "trestbps",
-            "chol",
-            "fbs",
-            "restecg",
-            "thalach",
-            "exang",
-            "oldpeak",
-            "slope",
-            "ca",
-            "thal"
-        ],
-        "selected_symptom_features": [
-            "BMI",
-            "Smoking",
-            "AlcoholDrinking",
-            "Stroke",
-            "PhysicalHealth",
-            "MentalHealth",
-            "DiffWalking",
-            "AgeCategory",
-            "Race",
-            "Diabetic",
-            "PhysicalActivity",
-            "SleepTime",
-            "Asthma",
-            "KidneyDisease",
-            "SkinCancer"
-        ],
-        "training_rows": 297,
-        "best_params": {
-            "clf__bootstrap": true,
-            "clf__max_depth": 60,
-            "clf__max_features": "sqrt",
-            "clf__min_samples_leaf": 4,
-            "clf__min_samples_split": 8,
-            "clf__n_estimators": 500
+    "Top SHAP Features": [
+        {
+            "feature": "ANN_Prob",
+            "impact": 0.232772
+        },
+        {
+            "feature": "XGBoost_Prob",
+            "impact": 0.157754
+        },
+        {
+            "feature": "RandomForest_Prob",
+            "impact": 0.012342
         }
-    }
+    ]
 }
