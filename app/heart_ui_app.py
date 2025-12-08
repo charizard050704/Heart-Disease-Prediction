@@ -39,17 +39,27 @@ def load_model_pipeline():
     model, loaded, errors = None, None, []
     metrics = {}
     try:
-        if os.path.exists("models/heart_fusion_v2.joblib"):
-            loaded = joblib.load("models/heart_fusion_v2.joblib")
-            # If loaded is a dict with a 'fusion' estimator, use that as the model
+        # 🩺 Highest priority: Symptom+Clinical fusion model
+        if os.path.exists("models/symptom_model.joblib"):
+            loaded = joblib.load("models/symptom_model.joblib")
             if isinstance(loaded, dict) and "fusion" in loaded:
                 model = loaded["fusion"]
             else:
-                # If loaded is itself a model/pipeline, use it
                 model = loaded
+
+        # ❤️ Next priority: heart_fusion_v2
+        elif os.path.exists("models/heart_fusion_v2.joblib"):
+            loaded = joblib.load("models/heart_fusion_v2.joblib")
+            if isinstance(loaded, dict) and "fusion" in loaded:
+                model = loaded["fusion"]
+            else:
+                model = loaded
+
+        # 🧠 Final fallback: XGBoost baseline
         elif os.path.exists("models/heart_xgb.joblib"):
             loaded = joblib.load("models/heart_xgb.joblib")
             model = loaded
+
         # Load metrics if present
         if os.path.exists("assets/model_metrics_extended.json"):
             with open("assets/model_metrics_extended.json", "r") as f:
@@ -65,6 +75,70 @@ if not MODEL_AVAILABLE:
     st.warning("Model failed to load. Prediction features will be disabled.")
     for err in load_errors:
         st.caption(err.replace("\n", " | ")[:1000])
+
+# ---------------- helper functions ----------------
+def categorize_age(a):
+    try:
+        a = int(a)
+    except Exception:
+        return "Unknown"
+    if a < 25: return "18-24"
+    if a < 30: return "25-29"
+    if a < 35: return "30-34"
+    if a < 40: return "35-39"
+    if a < 45: return "40-44"
+    if a < 50: return "45-49"
+    if a < 55: return "50-54"
+    if a < 60: return "55-59"
+    if a < 65: return "60-64"
+    if a < 70: return "65-69"
+    if a < 75: return "70-74"
+    if a < 80: return "75-79"
+    return "80 or older"
+
+def yn_to_int(v):
+    return 1 if str(v).lower() in {"yes","y","true","1"} else 0
+
+def get_expected_feature_names_from_pipeline(pipeline_obj):
+    # Try multiple strategies to discover the expected input feature names for a pipeline
+    try:
+        if hasattr(pipeline_obj, "feature_names_in_"):
+            return list(pipeline_obj.feature_names_in_)
+    except Exception:
+        pass
+    try:
+        # If it's a full pipeline with a ColumnTransformer named 'preprocessor'
+        if hasattr(pipeline_obj, "named_steps") and "preprocessor" in pipeline_obj.named_steps:
+            pre = pipeline_obj.named_steps["preprocessor"]
+            try:
+                return list(pre.get_feature_names_out())
+            except Exception:
+                names = []
+                if hasattr(pre, "transformers_"):
+                    for name, trans, cols in pre.transformers_:
+                        if trans is None:
+                            continue
+                        try:
+                            if hasattr(trans, "get_feature_names_out"):
+                                out = list(trans.get_feature_names_out(cols))
+                                names.extend(out)
+                            else:
+                                if hasattr(trans, "named_steps") and "onehot" in trans.named_steps:
+                                    ohe = trans.named_steps["onehot"]
+                                    if hasattr(ohe, "get_feature_names_out"):
+                                        out = list(ohe.get_feature_names_out(cols))
+                                        names.extend(out)
+                                    else:
+                                        names.extend(cols if isinstance(cols, (list,tuple)) else [cols])
+                                else:
+                                    names.extend(cols if isinstance(cols, (list,tuple)) else [cols])
+                        except Exception:
+                            names.extend(cols if isinstance(cols, (list,tuple)) else [cols])
+                if names:
+                    return names
+    except Exception:
+        pass
+    return None
 
 # ---------------- Doctor Page ----------------
 def doctor_page():
@@ -85,26 +159,52 @@ def doctor_page():
 
     st.sidebar.header("🩺 Patient Input Features")
 
-    # Collect inputs
+    # Collect inputs (basic: age + sex)
     age = st.sidebar.slider("Age", 20, 100, 50)
     sex_choice = st.sidebar.radio("Sex", ["Female", "Male"])
     sex = 1 if sex_choice == "Male" else 0
-    cp_choice = st.sidebar.radio("Chest Pain Type", list(cp_labels.values()))
+
+    # ---------------- extra symptom/lifestyle fields (placed right after Age/Sex) ----------------
+    # These are shown to the doctor immediately after age/sex (as requested).
+    # They will be included when building df_full for single-pipeline models.
+    BMI = st.sidebar.number_input("BMI (kg/m²)", min_value=10.0, max_value=60.0, value=25.0, step=0.1)
+    Smoking = st.sidebar.selectbox("Smoking", ["No", "Yes"])
+    AlcoholDrinking = st.sidebar.selectbox("Alcohol Drinking", ["No", "Yes"])
+    Stroke = st.sidebar.selectbox("History of Stroke", ["No", "Yes"])
+    PhysicalHealth = st.sidebar.number_input("Physical Health (days poor past 30)", 0, 30, 0)
+    MentalHealth = st.sidebar.number_input("Mental Health (days poor past 30)", 0, 30, 0)
+    DiffWalking = st.sidebar.selectbox("Difficulty Walking", ["No", "Yes"])
+    PhysicalActivity = st.sidebar.selectbox("Physical Activity", ["No", "Yes"])
+    SleepTime = st.sidebar.number_input("Avg Sleep Time (hrs)", 0, 24, 7)
+    Asthma = st.sidebar.selectbox("Asthma", ["No", "Yes"])
+    KidneyDisease = st.sidebar.selectbox("Kidney Disease", ["No", "Yes"])
+    SkinCancer = st.sidebar.selectbox("Skin Cancer", ["No", "Yes"])
+    Race = st.sidebar.selectbox("Race", ["White", "Black", "Asian", "Other"])
+    Diabetic = st.sidebar.selectbox("Diabetic", ["No", "Yes", "During pregnancy", "Borderline"])
+
+    # Add GenHealth as requested (placed near the basic demographic inputs)
+    GenHealth = st.sidebar.selectbox("General Health (GenHealth)", ["Excellent", "Very good", "Good", "Fair", "Poor"])
+
+    # divider to visually separate symptom inputs from clinical inputs
+    st.sidebar.markdown("---")
+
+    # Clinical inputs (kept after the symptom inputs) - converted to input boxes / selectboxes for unified style
+    cp_choice = st.sidebar.selectbox("Chest Pain Type", list(cp_labels.values()))
     cp = [k for k, v in cp_labels.items() if v == cp_choice][0]
-    trestbps = st.sidebar.slider("Resting BP (mm Hg)", 80, 200, 120)
-    chol = st.sidebar.slider("Cholesterol (mg/dl)", 100, 600, 200)
-    fbs_choice = st.sidebar.radio("Fasting Blood Sugar > 120 mg/dl", ["No", "Yes"])
+    trestbps = st.sidebar.number_input("Resting BP (mm Hg)", min_value=50, max_value=300, value=120, step=1)
+    chol = st.sidebar.number_input("Cholesterol (mg/dl)", min_value=50, max_value=1000, value=200, step=1)
+    fbs_choice = st.sidebar.selectbox("Fasting Blood Sugar > 120 mg/dl", ["No", "Yes"])
     fbs = 1 if fbs_choice == "Yes" else 0
-    recg_choice = st.sidebar.radio("Resting ECG", list(restecg_labels.values()))
+    recg_choice = st.sidebar.selectbox("Resting ECG", list(restecg_labels.values()))
     restecg = [k for k, v in restecg_labels.items() if v == recg_choice][0]
-    thalach = st.sidebar.slider("Max Heart Rate", 70, 220, 150)
-    exang_choice = st.sidebar.radio("Exercise Induced Angina", ["No", "Yes"])
+    thalach = st.sidebar.number_input("Max Heart Rate", min_value=30, max_value=300, value=150, step=1)
+    exang_choice = st.sidebar.selectbox("Exercise Induced Angina", ["No", "Yes"])
     exang = 1 if exang_choice == "Yes" else 0
-    oldpeak = st.sidebar.slider("ST Depression (Oldpeak)", 0.0, 6.0, 1.0)
-    slope_choice = st.sidebar.radio("Slope of ST Segment", list(slope_labels.values()))
+    oldpeak = st.sidebar.number_input("ST Depression (Oldpeak)", min_value=0.0, max_value=10.0, value=1.0, step=0.1, format="%.2f")
+    slope_choice = st.sidebar.selectbox("Slope of ST Segment", list(slope_labels.values()))
     slope = [k for k, v in slope_labels.items() if v == slope_choice][0]
-    ca = st.sidebar.slider("Number of Major Vessels (0-3)", 0, 3, 0)
-    thal_choice = st.sidebar.radio("Thalassemia", list(thal_labels.values()))
+    ca = st.sidebar.number_input("Number of Major Vessels (0-3)", min_value=0, max_value=3, value=0, step=1)
+    thal_choice = st.sidebar.selectbox("Thalassemia", list(thal_labels.values()))
     thal = [k for k, v in thal_labels.items() if v == thal_choice][0]
 
     model_data = {
@@ -159,6 +259,7 @@ def doctor_page():
                             st.error("Fusion or base models missing from bundle. Prediction cannot proceed.")
                             st.stop()
 
+                        # Convert to numpy array for base models (they likely expect raw numeric features)
                         X_np = np.array(df_input, dtype=float)
                         xgb_prob = float(xgb_model.predict_proba(X_np)[0][1])
                         rf_prob = float(rf_model.predict_proba(X_np)[0][1])
@@ -168,10 +269,67 @@ def doctor_page():
                         prob = float(fusion_model.predict_proba(fusion_input)[0][1])
 
                     else:
-                        prob = float(model.predict_proba(df_input)[0][1])
+                        # ---------- SINGLE-PIPELINE / COMBINED MODEL FLOW ----------
+                        # Build extras (symptom/lifestyle) and derive AgeCategory & Sex string
+                        extra = {
+                            "BMI": float(BMI),
+                            "Smoking": yn_to_int(Smoking),
+                            "AlcoholDrinking": yn_to_int(AlcoholDrinking),
+                            "Stroke": yn_to_int(Stroke),
+                            "PhysicalHealth": float(PhysicalHealth),
+                            "MentalHealth": float(MentalHealth),
+                            "DiffWalking": yn_to_int(DiffWalking),
+                            "PhysicalActivity": yn_to_int(PhysicalActivity),
+                            "SleepTime": float(SleepTime),
+                            "Asthma": yn_to_int(Asthma),
+                            "KidneyDisease": yn_to_int(KidneyDisease),
+                            "SkinCancer": yn_to_int(SkinCancer),
+                            "Race": str(Race),
+                            "Diabetic": str(Diabetic),
+                        }
+                        extra["AgeCategory"] = categorize_age(age)
+                        # include Sex string as many symptom datasets use "Sex"
+                        extra["Sex"] = "Male" if sex == 1 else "Female"
+                        # include GenHealth (string)
+                        extra["GenHealth"] = str(GenHealth)
+                        # include defaults for HeartDisease and source (prevents missing columns errors)
+                        # HeartDisease default = 0 (silent)
+                        extra["HeartDisease"] = 0
+                        # source default = "clinical" (silent)
+                        extra["source"] = "clinical"
 
+                        # Merge clinical model_data with extras to form a superset
+                        df_full = pd.DataFrame([ {**model_data, **extra} ])
+
+                        # Discover expected feature names for pipeline
+                        expected_cols = get_expected_feature_names_from_pipeline(model)
+
+                        if expected_cols:
+                            # check missing
+                            missing = [c for c in expected_cols if c not in df_full.columns]
+                            if missing:
+                                st.error("Model expects additional inputs that are not present in the UI.")
+                                st.write("Missing columns needed by model:", missing)
+                                st.info("Add these fields to the doctor sidebar or retrain the model with fewer required features.")
+                                st.stop()
+                            # reorder df_full to expected (most pipelines will accept pandas DF)
+                            try:
+                                df_full = df_full[expected_cols]
+                            except Exception:
+                                # if reordering fails, let predict_proba attempt to handle it; but keep user informed
+                                st.info("Warning: failed to reorder columns to pipeline expectation; will attempt prediction anyway.")
+                        else:
+                            # No expected cols discovered — attempt to call predict_proba with df_full directly,
+                            # but ensure column names match what we can supply
+                            pass
+
+                        # final predict
+                        prob = float(model.predict_proba(df_full)[0][1])
+
+                    # Save prediction
                     db.save_prediction(st.session_state.email, patient_name, prob, "High" if prob > 0.5 else "Low", model_data)
 
+                    # AI Diagnosis Section
                     st.markdown("---")
                     st.subheader("🧠 AI Diagnosis Result")
                     if prob <= 0.30:
@@ -197,9 +355,10 @@ def doctor_page():
                         st.markdown("---")
                         st.subheader("📊 Model Performance Summary")
                         cols = st.columns(3)
-                        train_acc = metrics.get("train_accuracy", metrics.get("Train Accuracy", 0))
-                        val_acc = metrics.get("val_accuracy", metrics.get("Validation Accuracy", 0))
-                        test_acc = metrics.get("test_accuracy", metrics.get("Test Accuracy", 0))
+                        fusion_metrics = metrics.get("Symptom+Clinical Fusion", metrics)
+                        train_acc = fusion_metrics.get("train_accuracy", fusion_metrics.get("Train Accuracy", 0))
+                        val_acc = fusion_metrics.get("val_accuracy", fusion_metrics.get("Validation Accuracy", 0))
+                        test_acc = fusion_metrics.get("test_accuracy", fusion_metrics.get("Test Accuracy", 0))
                         cols[0].metric("Train Accuracy", f"{train_acc:.2f}")
                         cols[1].metric("Validation Accuracy", f"{val_acc:.2f}")
                         cols[2].metric("Test Accuracy", f"{test_acc:.2f}")
@@ -207,7 +366,8 @@ def doctor_page():
                         st.markdown("### 🔍 Model Visual Insights")
                         plot_files = [
                             "roc_curve.png", "pr_curve.png", "feature_importance_bar.png",
-                            "shap_summary.png", "correlation_heatmap.png", "top_features_risk.png"
+                            "shap_summary.png", "correlation_heatmap.png", "top_features_risk.png",
+                            "symptom_clinical_feature_importance.png"
                         ]
                         for pf in plot_files:
                             path = os.path.join("assets", pf)

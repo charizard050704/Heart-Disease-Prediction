@@ -6,6 +6,15 @@ import seaborn as sns
 import json
 import os
 
+# --- Uniform plot settings (professor requirements) ---
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.dpi'] = 300
+plt.rcParams['font.size'] = 14
+plt.rcParams['axes.labelsize'] = 14
+plt.rcParams['xtick.labelsize'] = 14
+plt.rcParams['ytick.labelsize'] = 14
+plt.rcParams['legend.fontsize'] = 14
+
 # Ensure directories
 os.makedirs("assets", exist_ok=True)
 os.makedirs("data", exist_ok=True)
@@ -21,9 +30,9 @@ print("Generating correlation heatmap...")
 plt.figure(figsize=(10,8))
 corr = df.corr(numeric_only=True)
 sns.heatmap(corr, annot=False, cmap="coolwarm", center=0)
-plt.title("Feature Correlation Heatmap (Heart Disease Dataset)")
+# plt.title removed as per professor requirement
 plt.tight_layout()
-plt.savefig("assets/correlation_heatmap.png", bbox_inches="tight")
+plt.savefig("assets/correlation_heatmap.eps", format='eps', bbox_inches="tight")
 plt.close()
 
 # --- 2. Top Features Driving Heart Risk ---
@@ -36,10 +45,11 @@ else:
 
 plt.figure(figsize=(7,5))
 sns.barplot(x=top_corr.values, y=top_corr.index, hue=top_corr.index, palette="Reds_r", legend=False)
-plt.title("Top Features Driving Heart Disease Risk")
+plt.ylabel("") 
+# plt.title removed
 plt.xlabel("Correlation with Target")
 plt.tight_layout()
-plt.savefig("assets/top_features_risk.png", bbox_inches="tight")
+plt.savefig("assets/top_features_risk.eps", format='eps', bbox_inches="tight")
 plt.close()
 
 # --- 3. Summary Statistics for Key Predictors ---
@@ -63,4 +73,4 @@ metrics_data["Health Summary Stats"] = summary_dict
 with open(metrics_path, "w") as fh:
     json.dump(metrics_data, fh, indent=4)
 
-print("✅ Correlation heatmap, top-risk bar chart, and summary stats saved in /assets/")
+print("✅ Correlation heatmap, top-risk bar chart, and summary stats saved in EPS format in /assets/")
